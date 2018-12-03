@@ -69,7 +69,7 @@ class ParallelTrainer(Trainer):
         self.recon = recon
         self.test_noise = []
         for model in self.model_names:
-            if isinstance(getattr(self, model), Generator):
+            if isinstance(getattr(self, model).module, Generator):
                 self.test_noise.append(torch.randn(self.sample_size, getattr(self, model).encoding_dims,
                                                    device=self.device) if test_noise is None else test_noise)
         # Not needed but we need to store this to avoid errors. Also makes life simpler
@@ -101,3 +101,26 @@ class ParallelTrainer(Trainer):
 
         os.makedirs(self.checkpoints, exist_ok=True)
         os.makedirs(self.recon, exist_ok=True)
+
+        # Terrible temporary fix
+    def sample_images(self, epoch):
+        pos = 0
+        for model in self.model_names:
+            if isinstance(getattr(self, model).module, Generator):
+                save_path = "{}/epoch{}_{}.png".format(self.recon, epoch + 1, model)
+                print("Generating and Saving Images to {}".format(save_path))
+                generator = getattr(self, model)
+                with torch.no_grad():
+                    # TODO(Aniket1998): This is a terrible temporary fix
+                    # Sampling images varies from generator to generator and
+                    # a more robust sample_images method is required
+                    if generator.label_type == 'none':
+                        images = generator(self.test_noise[pos].to(self.device))
+                    else:
+                        label_gen = torch.randint(0, generator.num_classes, (self.sample_size,), device=self.device)
+                        images = generator(self.test_noise[pos].to(self.device), label_gen)
+                    pos = pos + 1
+                    img = torchvision.utils.make_grid(images)
+                    torchvision.utils.save_image(img, save_path, nrow=self.nrow)
+                    if self.log_tensorboard:
+                        self.writer.add_image("Generated Samples/{}".format(model), img, self._get_step(False))
