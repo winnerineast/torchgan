@@ -186,8 +186,10 @@ class ImageVisualize(Visualize):
         super(ImageVisualize, self).__init__([], visdom_port=visdom_port, log_dir=log_dir, writer=writer)
         self.test_noise = []
         for model in trainer.model_names:
-            if isinstance(getattr(trainer, model), Generator):
-                self.test_noise.append(getattr(trainer, model).sampler(trainer.sample_size, trainer.device)
+            m = getattr(trainer, model)
+            if isinstance(m, Generator) or (isinstance(m, torch.nn.DataParallel) and
+                isinstance(m.module, Generator)):
+                self.test_noise.append(m.sampler(trainer.sample_size, trainer.device)
                                        if test_noise is None else test_noise)
         self.step = 1
         self.nrow = nrow
@@ -206,10 +208,11 @@ class ImageVisualize(Visualize):
     def __call__(self, trainer, **kwargs):
         pos = 0
         for model in trainer.model_names:
-            if isinstance(getattr(trainer, model), Generator):
-                generator = getattr(trainer, model)
+            m = getattr(trainer, model)
+            if isinstance(m, Generator) or (isinstance(m, torch.nn.DataParallel) and
+                isinstance(m.module, Generator)):
                 with torch.no_grad():
-                    image = generator(*self.test_noise[pos])
+                    image = m(*self.test_noise[pos])
                     image = torchvision.utils.make_grid(image)
                     super(ImageVisualize, self).__call__(trainer, image, model, **kwargs)
                 pos = pos + 1
