@@ -1,15 +1,10 @@
 import torch
-from .loss import GeneratorLoss, DiscriminatorLoss
-from ..utils import reduce
 
-__all__ = ['least_squares_generator_loss', 'least_squares_discriminator_loss',
-           'LeastSquaresGeneratorLoss', 'LeastSquaresDiscriminatorLoss']
+from .functional import least_squares_discriminator_loss, least_squares_generator_loss
+from .loss import DiscriminatorLoss, GeneratorLoss
 
-def least_squares_generator_loss(dgz, c=1.0, reduction='mean'):
-    return 0.5 * reduce((dgz - c) ** 2, reduction)
+__all__ = ["LeastSquaresGeneratorLoss", "LeastSquaresDiscriminatorLoss"]
 
-def least_squares_discriminator_loss(dx, dgz, a=0.0, b=1.0, reduction='mean'):
-    return 0.5 * (reduce((dx - b) ** 2, reduction) + reduce((dgz - a) ** 2, reduction))
 
 class LeastSquaresGeneratorLoss(GeneratorLoss):
     r"""Least Squares GAN generator loss from `"Least Squares Generative Adversarial Networks
@@ -33,7 +28,8 @@ class LeastSquaresGeneratorLoss(GeneratorLoss):
         c (float, optional): Target generator label.
         override_train_ops (function, optional): Function to be used in place of the default ``train_ops``
     """
-    def __init__(self, reduction='mean', c=1.0, override_train_ops=None):
+
+    def __init__(self, reduction="mean", c=1.0, override_train_ops=None):
         super(LeastSquaresGeneratorLoss, self).__init__(reduction, override_train_ops)
         self.c = c
 
@@ -74,8 +70,11 @@ class LeastSquaresDiscriminatorLoss(DiscriminatorLoss):
         b (float, optional): Target discriminator label for real image.
         override_train_ops (function, optional): Function to be used in place of the default ``train_ops``
     """
-    def __init__(self, reduction='mean', a=0.0, b=1.0, override_train_ops=None):
-        super(LeastSquaresDiscriminatorLoss, self).__init__(reduction, override_train_ops)
+
+    def __init__(self, reduction="mean", a=0.0, b=1.0, override_train_ops=None):
+        super(LeastSquaresDiscriminatorLoss, self).__init__(
+            reduction, override_train_ops
+        )
         self.a = a
         self.b = b
 

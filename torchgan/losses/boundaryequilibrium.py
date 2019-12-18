@@ -1,8 +1,13 @@
 import torch
-from .loss import GeneratorLoss, DiscriminatorLoss
-from ..utils import reduce
 
-__all__ = ['BoundaryEquilibriumGeneratorLoss', 'BoundaryEquilibriumDiscriminatorLoss']
+from .functional import (
+    boundary_equilibrium_discriminator_loss,
+    boundary_equilibrium_generator_loss,
+)
+from .loss import DiscriminatorLoss, GeneratorLoss
+
+__all__ = ["BoundaryEquilibriumGeneratorLoss", "BoundaryEquilibriumDiscriminatorLoss"]
+
 
 class BoundaryEquilibriumGeneratorLoss(GeneratorLoss):
     r"""Boundary Equilibrium GAN generator loss from
@@ -24,6 +29,7 @@ class BoundaryEquilibriumGeneratorLoss(GeneratorLoss):
             If ``sum`` the elements of the output are summed.
         override_train_ops (function, optional): Function to be used in place of the default ``train_ops``
     """
+
     def forward(self, dgz):
         r"""Computes the loss for the given input.
 
@@ -35,7 +41,8 @@ class BoundaryEquilibriumGeneratorLoss(GeneratorLoss):
         Returns:
             scalar if reduction is applied else Tensor with dimensions (N, \*).
         """
-        return reduce(dgz, self.reduction)
+        return boundary_equilibrium_generator_loss(dgz, self.reduction)
+
 
 class BoundaryEquilibriumDiscriminatorLoss(DiscriminatorLoss):
     r"""Boundary Equilibrium GAN discriminator loss from
@@ -65,8 +72,18 @@ class BoundaryEquilibriumDiscriminatorLoss(DiscriminatorLoss):
         lambd (float, optional): Learning rate of the running average.
         gamma (float, optional): Goal bias hyperparameter.
     """
-    def __init__(self, reduction='mean', override_train_ops=None, init_k=0.0, lambd=0.001, gamma=0.75):
-        super(BoundaryEquilibriumDiscriminatorLoss, self).__init__(reduction, override_train_ops)
+
+    def __init__(
+        self,
+        reduction="mean",
+        override_train_ops=None,
+        init_k=0.0,
+        lambd=0.001,
+        gamma=0.75,
+    ):
+        super(BoundaryEquilibriumDiscriminatorLoss, self).__init__(
+            reduction, override_train_ops
+        )
         self.reduction = reduction
         self.override_train_ops = override_train_ops
         self.k = init_k
@@ -90,10 +107,7 @@ class BoundaryEquilibriumDiscriminatorLoss(DiscriminatorLoss):
             A tuple of 3 loss values, namely the ``total loss``, ``loss due to real data`` and ``loss
             due to fake data``.
         """
-        loss_real = reduce(dx, self.reduction)
-        loss_fake = reduce(dgz, self.reduction)
-        loss_total = loss_real - self.k * loss_fake
-        return loss_total, loss_real, loss_fake
+        return boundary_equilibrium_discriminator_loss(dx, dgz, self.k, self.reduction)
 
     def set_k(self, k=0.0):
         r"""Change the default value of k
@@ -118,13 +132,17 @@ class BoundaryEquilibriumDiscriminatorLoss(DiscriminatorLoss):
         self.k += self.lambd * diff
         # TODO(Aniket1998): Develop this into a proper TorchGAN convergence metric
         self.convergence_metric = loss_real + abs(diff)
-        if self.k < 0.0:
-            self.k = 0.0
-        elif self.k > 1.0:
-            self.k = 1.0
+        self.k = max(min(self.k, 1.0), 0.0)
 
-    def train_ops(self, generator, discriminator, optimizer_discriminator, real_inputs,
-                  device, labels=None):
+    def train_ops(
+        self,
+        generator,
+        discriminator,
+        optimizer_discriminator,
+        real_inputs,
+        device,
+        labels=None,
+    ):
         r"""Defines the standard ``train_ops`` used by boundary equilibrium loss.
 
         The ``standard optimization algorithm`` for the ``discriminator`` defined in this train_ops
@@ -152,32 +170,44 @@ class BoundaryEquilibriumDiscriminatorLoss(DiscriminatorLoss):
             Scalar value of the loss.
         """
         if self.override_train_ops is not None:
-            return self.override_train_ops(self, generator, discriminator, optimizer_discriminator,
-                   real_inputs, device, labels)
+            return self.override_train_ops(
+                self,
+                generator,
+                discriminator,
+                optimizer_discriminator,
+                real_inputs,
+                device,
+                labels,
+            )
         else:
-            if labels is None and (generator.label_type == 'required' or discriminator.label_type == 'required'):
-                raise Exception('GAN model requires labels for training')
+            if labels is None and (
+                generator.label_type == "required"
+                or discriminator.label_type == "required"
+            ):
+                raise Exception("GAN model requires labels for training")
             batch_size = real_inputs.size(0)
             noise = torch.randn(batch_size, generator.encoding_dims, device=device)
-            if generator.label_type == 'generated':
-                label_gen = torch.randint(0, generator.num_classes, (batch_size,), device=device)
+            if generator.label_type == "generated":
+                label_gen = torch.randint(
+                    0, generator.num_classes, (batch_size,), device=device
+                )
             optimizer_discriminator.zero_grad()
-            if discriminator.label_type == 'none':
+            if discriminator.label_type == "none":
                 dx = discriminator(real_inputs)
-            elif discriminator.label_type == 'required':
+            elif discriminator.label_type == "required":
                 dx = discriminator(real_inputs, labels)
             else:
                 dx = discriminator(real_inputs, label_gen)
-            if generator.label_type == 'none':
+            if generator.label_type == "none":
                 fake = generator(noise)
-            elif generator.label_type == 'required':
+            elif generator.label_type == "required":
                 fake = generator(noise, labels)
             else:
                 fake = generator(noise, label_gen)
-            if discriminator.label_type == 'none':
+            if discriminator.label_type == "none":
                 dgz = discriminator(fake.detach())
             else:
-                if generator.label_type == 'generated':
+                if generator.label_type == "generated":
                     dgz = discriminator(fake.detach(), label_gen)
                 else:
                     dgz = discriminator(fake.detach(), labels)

@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .dcgan import DCGANGenerator, DCGANDiscriminator
 
-__all__ = ['ACGANGenerator', 'ACGANDiscriminator']
+from .dcgan import DCGANDiscriminator, DCGANGenerator
+
+__all__ = ["ACGANGenerator", "ACGANDiscriminator"]
+
 
 class ACGANGenerator(DCGANGenerator):
     r"""Auxiliary Classifier GAN (ACGAN) generator based on a DCGAN model from
@@ -26,10 +28,28 @@ class ACGANGenerator(DCGANGenerator):
         last_nonlinearity (torch.nn.Module, optional): Nonlinearity to be used in the final
             convolutional layer. Defaults to ``Tanh()`` when None is passed.
     """
-    def __init__(self, num_classes, encoding_dims=100, out_size=32, out_channels=3,
-                 step_channels=64, batchnorm=True, nonlinearity=None, last_nonlinearity=None):
-        super(ACGANGenerator, self).__init__(encoding_dims, out_size,
-                out_channels, step_channels, batchnorm, nonlinearity, last_nonlinearity, label_type='generated')
+
+    def __init__(
+        self,
+        num_classes,
+        encoding_dims=100,
+        out_size=32,
+        out_channels=3,
+        step_channels=64,
+        batchnorm=True,
+        nonlinearity=None,
+        last_nonlinearity=None,
+    ):
+        super(ACGANGenerator, self).__init__(
+            encoding_dims,
+            out_size,
+            out_channels,
+            step_channels,
+            batchnorm,
+            nonlinearity,
+            last_nonlinearity,
+            label_type="generated",
+        )
         self.encoding_dims = encoding_dims
         self.num_classes = num_classes
         self.label_embeddings = nn.Embedding(self.num_classes, self.encoding_dims)
@@ -49,8 +69,10 @@ class ACGANGenerator(DCGANGenerator):
         return super(ACGANGenerator, self).forward(torch.mul(y_emb, z))
 
     def sampler(self, sample_size, device):
-        return [torch.randn(sample_size, self.encoding_dims, device=device),
-                torch.randint(0, self.num_classes, (sample_size,), device=device)]
+        return [
+            torch.randn(sample_size, self.encoding_dims, device=device),
+            torch.randint(0, self.num_classes, (sample_size,), device=device),
+        ]
 
 
 class ACGANDiscriminator(DCGANDiscriminator):
@@ -73,17 +95,35 @@ class ACGANDiscriminator(DCGANDiscriminator):
         last_nonlinearity (torch.nn.Module, optional): Nonlinearity to be used in the final
             convolutional layer. Defaults to ``Tanh()`` when None is passed.
     """
-    def __init__(self, num_classes, in_size=32, in_channels=3, step_channels=64, batchnorm=True,
-                 nonlinearity=None, last_nonlinearity=None):
-        super(ACGANDiscriminator, self).__init__(in_size, in_channels, step_channels,
-                batchnorm, nonlinearity, last_nonlinearity, label_type='none')
+
+    def __init__(
+        self,
+        num_classes,
+        in_size=32,
+        in_channels=3,
+        step_channels=64,
+        batchnorm=True,
+        nonlinearity=None,
+        last_nonlinearity=None,
+    ):
+        super(ACGANDiscriminator, self).__init__(
+            in_size,
+            in_channels,
+            step_channels,
+            batchnorm,
+            nonlinearity,
+            last_nonlinearity,
+            label_type="none",
+        )
         last_nl = nn.LeakyReLU(0.2) if last_nonlinearity is None else last_nonlinearity
         self.input_dims = in_channels
         self.num_classes = num_classes
         d = self.n * 2 ** (in_size.bit_length() - 4)
-        self.aux = nn.Sequential(nn.Conv2d(d, self.num_classes, 4, 1, 0, bias=False), last_nl)
+        self.aux = nn.Sequential(
+            nn.Conv2d(d, self.num_classes, 4, 1, 0, bias=False), last_nl
+        )
 
-    def forward(self, x, mode='discriminator', feature_matching=False):
+    def forward(self, x, mode="discriminator", feature_matching=False):
         r"""Calculates the output tensor on passing the image ``x`` through the Discriminator.
 
         Args:
@@ -101,13 +141,13 @@ class ACGANDiscriminator(DCGANDiscriminator):
         x = self.model(x)
         if feature_matching is True:
             return x
-        if mode == 'discriminator':
+        if mode == "discriminator":
             dx = self.disc(x)
-            return dx.view(dx.size(0),)
-        elif mode == 'classifier':
+            return dx.view(dx.size(0))
+        elif mode == "classifier":
             cx = self.aux(x)
             return cx.view(cx.size(0), cx.size(1))
         else:
             dx = self.disc(x)
             cx = self.aux(x)
-            return dx.view(dx.size(0),), cx.view(cx.size(0), cx.size(1))
+            return dx.view(dx.size(0)), cx.view(cx.size(0), cx.size(1))
